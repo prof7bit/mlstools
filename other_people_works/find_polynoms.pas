@@ -288,13 +288,13 @@ var
     poly, poly2: cardinal;
 
 begin
-    deg := 12;
+    deg := 8;
     poly := 0;
     while True do begin
         poly := FindPrimitivePolynom(poly, deg);
         if poly > 0 then begin
             poly2 := (poly << 1) or 1;
-            writeln('0x' + inttohex(poly, 0));
+            writeln('0x' + inttohex(poly2, 0));
             inc(poly);
         end else
             break;

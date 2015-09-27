@@ -13,10 +13,11 @@ butterfly to reduce memory usage on the target platform.
 """
 
 import sys
+import math
 import unittest
 
 def poly_degree(poly):
-    """Return the degree of the polynominal"""
+    """Return the degree of the polynomial"""
     l = -1
     while poly:
         poly >>= 1
@@ -27,7 +28,7 @@ def poly_degree(poly):
 def mls_length_from_poly(poly):
     """Return the period length of the generated mls.
     This function does NOT check whether it really is
-    a primitive polynominal, it will just calculate
+    a primitive polynomial, it will just calculate
     how long such an MLS would be."""
     return (2 ** poly_degree(poly)) - 1
 
@@ -36,7 +37,7 @@ def generate_mls(poly):
     """Implement the LFSR and return a list containing 
     one period of the generated MLS with elements consisting 
     of 1 or 0. This function will not check whether the 
-    polynominal is really primitive, it will just blindly 
+    polynomial is really primitive, it will just blindly 
     assume it is."""
     deg = poly_degree(poly)
     length = mls_length_from_poly(poly)
@@ -152,6 +153,156 @@ def inplace_permuted_butterfly(x, perm):
                 x[perm[i]]          = x[perm[i]] + temp
                 i += next    
                 
+                
+def find_primitive_poly(poly, degree):
+    """This function does not yet work, it still contains 
+    lots of porting errors, typos, etc.
+    
+    Find primitive polynomial.
+    Original Pascal code written by Hagen Reddmann, 
+    published in https://www.mikrocontroller.net/topic/279499#2950484
+    ported to Python more or lesss without modifications.
+    """
+    assert(degree > 0)
+    assert(degree < 32)
+    
+    def even_parity(poly):
+        """returns TRUE if count of bits set to 1 in Poly is even"""
+        p = True
+        while poly:
+            if poly & 1:
+                p = not p
+            poly >>= 1
+        return p
+    
+    def poly_init(M, poly, degree):
+        l = 0x80000000
+        M[degree - 1] = l
+        for i in range(degree - 1):
+            l >>= 1
+            M[i] = l
+        for i in range(degree - 1):
+            if poly & 1:
+                M[i] |= 0x80000000
+            poly >>= 1
+            
+    def poly_copy(D, S):
+        for i in range(len(S)):
+            D[i] = S[i]
+    
+    def poly_mul(R, M, degree):
+        T = [0] * 32 # TPolyMatrix
+        for i in range(degree):
+            n = M[i]
+            d = 0
+            for j in range(degree):
+                if (n & 0x80000000) != 0:
+                    d = d ^ R[j]
+                n <<= 1
+            T[i] = d
+        poly_copy(R, T)
+        
+    def poly_pow_mod(R, M, n, degree):
+        poly_copy(R, M)
+        l = 0x80000000
+        while (n & l) == 0:
+            l >>= 1
+        while l > 1:
+            l >>= 1
+            poly_mul(R, R, degree)
+            if (l & n) != 0:
+                poly_mul(R, M, degree)
+    
+    def poly_is_primitive(poly, degree, factors, factor_count):
+        P = [0] * 32   # TPolyMatrix in original pascal code
+        M = [0] * 32
+        poly_init(M, poly, degree)
+        poly_copy(P, M)
+        state = P[0]
+        for i in range(1, degree+1):
+            poly_mul(P, P, degree)
+            if P[0] == state:
+                if i == degree:
+                    for j in range(factor_count):
+                        poly_pow_mod(P, M, factors[j], degree)
+                        if P[0] == 0x80000000:
+                            return False
+                    return True
+                else:
+                    return False
+        return False
+    
+    def factor_order(factors, degree):
+        """find factors of 2^Degree-1 = possible Order of Polynom
+        can be surrely more optimized, but the runtime here is not important yet
+        as example:
+            For all orders from 2^0 -1 upto 2^32-1 exists only 33 possible primefactors.
+            Instead to looping trough all odd numbers as factors we could reduce the
+            loopcount if we use a lookuptable of all the 33 possible primefactors.
+        """
+        result = 0
+        last_factor = 0
+        prime = 3
+        order = 0xffffffff >> (32 - degree)
+        rest = order
+        bound = int(round(math.sqrt(rest)))
+        while (rest != 1) and (prime < bound):
+            if rest % prime == 0:
+                rest = rest // prime
+                factor = order // prime
+                if factor != last_factor:
+                    last_factor = factor
+                    factors[result] = factor
+                    result += 1
+                bound = int(round(math.sqrt(rest)))
+            else:
+                prime += 2
+        if result > 0: 
+            # only if 2^Degree-1 itself isn't prime
+            factors[result] = order // rest
+            result += 1
+        return result
+    
+    factors = [0] * 6
+    mask = 0xffffffff >> (32 - degree)
+    poly = (poly & mask) | (1 << (degree - 1))
+    factor_count = factor_order(factors, degree)
+    while poly <= mask:
+        if poly_is_primitive(poly, degree, factors, factor_count):
+            return poly
+        else:
+            while True:
+                poly += 1
+                if (poly > mask) or even_parity(poly):
+                    break
+
+
+def find_all_primitive_polys(degree):
+    """Find all primitive polynomials of certain degree.
+    Each polynomial is represented by a binary number 
+    where the nth bit represents the term x^n. for 
+    example consider the polynomial:
+    
+        x^4 + x + 1
+        
+    this would be represented by the binary number
+    
+        10011
+        
+    all functions in this module are using the same
+    binary representation for the polynomials.
+    """
+    poly = 0
+    results = []
+    while True:
+        poly = find_primitive_poly(poly, degree)
+        if poly > 0:
+            poly_with_1 = (poly << 1) | 1
+            results.append(poly_with_1)
+            poly += 1
+        else:
+            return results
+
 
 def generate_c(poly):
     """generate C code for an array that holds the permutation
@@ -182,7 +333,7 @@ def generate_c(poly):
     
     lines = [", ".join(line) for line in lines]
     datablock = "    " + ",\n    ".join(lines)
-    return ("const %s permutation[%g] = {\n" % (type, count)) + datablock + "\n};\n"
+    return ("const %s input_permutation[%g] = {\n" % (type, count)) + datablock + "\n};\n"
 
 
 
@@ -270,6 +421,11 @@ class TestCase(unittest.TestCase):
         
         # all of them will be 1 except one single element:
         self.assertEqual(samples, [1]*2288 + [-4095] + [1]*1807)
+        
+    def test_hagens_code(self):
+        degree = 8
+        results = find_all_primitive_polys(degree)
+        self.assertEqual(results, [285, 299, 301, 333, 351, 355, 357, 361, 369, 391, 397, 425, 451, 463, 487, 501])
         
 
 if __name__ == '__main__':    
