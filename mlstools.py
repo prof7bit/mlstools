@@ -13,7 +13,7 @@ butterfly to reduce memory usage on the target platform.
 """
 
 import sys
-
+import unittest
 
 def poly_degree(poly):
     """Return the degree of the polynominal"""
@@ -190,102 +190,91 @@ def generate_c(poly):
 # * unit tests (and usage examples) *
 # ***********************************
 
-def test_poly_degree():
-    assert(poly_degree(0x0b) == 3)
-    assert(poly_degree(0x1053) == 12)
+class TestCase(unittest.TestCase):
+    def test_poly_degree(self):
+        self.assertEqual(poly_degree(0x0b), 3)
+        self.assertEqual(poly_degree(0x1053), 12)
 
-def test_mls_length_from_poly():
-    assert(mls_length_from_poly(0x0b) == 7)
-    assert(mls_length_from_poly(0x1053) == 4095)
+    def test_mls_length_from_poly(self):
+        self.assertEqual(mls_length_from_poly(0x0b), 7)
+        self.assertEqual(mls_length_from_poly(0x1053), 4095)
 
-def test_generate_mls():
-    POLY3 = 0x0B
-    POLY4 = 0x19
-    POLY5 = 0x25
-    m3 = generate_mls(POLY3)
-    m4 = generate_mls(POLY4)
-    m5 = generate_mls(POLY5)
-    assert(m3 == [1, 1, 1, 0, 0, 1, 0])
-    assert(m4 == [1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0])
-    assert(m5 == [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
+    def test_generate_mls(self):
+        POLY3 = 0x0B
+        POLY4 = 0x19
+        POLY5 = 0x25
+        m3 = generate_mls(POLY3)
+        m4 = generate_mls(POLY4)
+        m5 = generate_mls(POLY5)
+        self.assertEqual(m3, [1, 1, 1, 0, 0, 1, 0])
+        self.assertEqual(m4, [1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0])
+        self.assertEqual(m5, [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
 
-def test_generate_input_permutation():
-    POLY3 = 0x0b
-    perm = generate_input_permutation(POLY3)
-    assert(perm == [0, 4, 5, 7, 3, 6, 2, 1])
+    def test_generate_input_permutation(self):
+        POLY3 = 0x0b
+        perm = generate_input_permutation(POLY3)
+        self.assertEqual(perm, [0, 4, 5, 7, 3, 6, 2, 1])
 
-def test_inplace_permuted_butterfly():
-    # test vectors manually created and found in other examples
-    # x and perm prepended with 0 to make them 2^n elements
-    x1    = [0,  1,  1,  1, -1,  1, -1, -1]
-    x2    = [0, -1,  1,  1,  1, -1,  1, -1]
-    x3    = [0, -1, -1,  1,  1,  1, -1,  1]
-    x4    = [0,  1, -1, -1,  1,  1,  1, -1]
-    x5    = [0, -1,  1, -1, -1,  1,  1,  1]
-    x6    = [0,  1, -1,  1, -1, -1,  1,  1]
-    x7    = [0,  1,  1, -1,  1, -1, -1,  1]
-    perm = [0,  3,  2,  7,  1,  4,  6,  5]
-    inplace_permuted_butterfly(x1, perm)
-    inplace_permuted_butterfly(x2, perm)
-    inplace_permuted_butterfly(x3, perm)
-    inplace_permuted_butterfly(x4, perm)
-    inplace_permuted_butterfly(x5, perm)
-    inplace_permuted_butterfly(x6, perm)
-    inplace_permuted_butterfly(x7, perm)
-    assert(x1 == [1, 1, 1, 1, 1, -7, 1, 1])
-    assert(x2 == [1, 1, 1, 1, 1, 1, 1, -7])
-    assert(x3 == [1, 1, 1, -7, 1, 1, 1, 1])
-    assert(x4 == [1, -7, 1, 1, 1, 1, 1, 1])
-    assert(x5 == [1, 1, -7, 1, 1, 1, 1, 1])
-    assert(x6 == [1, 1, 1, 1, -7, 1, 1, 1])
-    assert(x7 == [1, 1, 1, 1, 1, 1, -7, 1])
-    
-def test_inplace_permuted_butterfly_with_own_generated_perms():
-    poly = 0x25
-    mls = generate_mls(poly)
-    assert(mls == [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
-    
-    # We need a power of 2 number of measurement samples for the
-    # inplace-butterfly. We create them directly from the mls and
-    # prepend 0 as the first element.
-    samples = [0] + [2 * x - 1 for x in mls]
-    assert(samples == [0, 1, 1, 1, 1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, -1, 1, -1, 1, -1, -1, -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, -1])
-    
-    # the generated permutation already has the 0 prepended for the correct size
-    perm = generate_input_permutation(poly)
-    assert(perm == [0, 19, 20, 6, 21, 24, 7, 30, 17, 22, 15, 25, 27, 8, 11, 31, 18, 5, 23, 29, 16, 14, 26, 10, 4, 28, 13, 9, 3, 12, 2, 1])
-    
-    # all information about the mls is encoded in the permutation,
-    # the butterfly will use it to know how to fold the samples
-    inplace_permuted_butterfly(samples, perm)
-    assert(samples == [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -31, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
-    
-def test_inplace_permuted_butterfly_with_own_generated_perms_large():
-    poly = 0x1107 # this will be quite large
-    mls = generate_mls(poly)
-    samples = [0] + [2 * x - 1 for x in mls]
-    perm = generate_input_permutation(poly)
-    inplace_permuted_butterfly(samples, perm)
-    
-    # all of them will be 1 except one single element:
-    assert(samples == [1]*2288 + [-4095] + [1]*1807)
+    def test_inplace_permuted_butterfly(self):
+        # test vectors manually created and found in other examples
+        # x and perm prepended with 0 to make them 2^n elements
+        x1    = [0,  1,  1,  1, -1,  1, -1, -1]
+        x2    = [0, -1,  1,  1,  1, -1,  1, -1]
+        x3    = [0, -1, -1,  1,  1,  1, -1,  1]
+        x4    = [0,  1, -1, -1,  1,  1,  1, -1]
+        x5    = [0, -1,  1, -1, -1,  1,  1,  1]
+        x6    = [0,  1, -1,  1, -1, -1,  1,  1]
+        x7    = [0,  1,  1, -1,  1, -1, -1,  1]
+        perm = [0,  3,  2,  7,  1,  4,  6,  5]
+        inplace_permuted_butterfly(x1, perm)
+        inplace_permuted_butterfly(x2, perm)
+        inplace_permuted_butterfly(x3, perm)
+        inplace_permuted_butterfly(x4, perm)
+        inplace_permuted_butterfly(x5, perm)
+        inplace_permuted_butterfly(x6, perm)
+        inplace_permuted_butterfly(x7, perm)
+        self.assertEqual(x1, [1, 1, 1, 1, 1, -7, 1, 1])
+        self.assertEqual(x2, [1, 1, 1, 1, 1, 1, 1, -7])
+        self.assertEqual(x3, [1, 1, 1, -7, 1, 1, 1, 1])
+        self.assertEqual(x4, [1, -7, 1, 1, 1, 1, 1, 1])
+        self.assertEqual(x5, [1, 1, -7, 1, 1, 1, 1, 1])
+        self.assertEqual(x6, [1, 1, 1, 1, -7, 1, 1, 1])
+        self.assertEqual(x7, [1, 1, 1, 1, 1, 1, -7, 1])
         
-def run_tests():
-    g = globals()
-    f = []
-    for name in g:
-        o = g[name]
-        if (hasattr(o, '__call__')) and (name[:5] == 'test_'):
-            f.append((o.func_code.co_firstlineno, o, name))
-    f.sort()
-    for line, o, name in f:
-        print "* %s(), line %s..." % (name, line)
-        o()
-    print "all testes passed :-)"
+    def test_inplace_permuted_butterfly_with_own_generated_perms(self):
+        poly = 0x25
+        mls = generate_mls(poly)
+        self.assertEqual(mls, [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
+        
+        # We need a power of 2 number of measurement samples for the
+        # inplace-butterfly. We create them directly from the mls and
+        # prepend 0 as the first element.
+        samples = [0] + [2 * x - 1 for x in mls]
+        self.assertEqual(samples, [0, 1, 1, 1, 1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, -1, 1, -1, 1, -1, -1, -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, -1])
+        
+        # the generated permutation already has the 0 prepended for the correct size
+        perm = generate_input_permutation(poly)
+        self.assertEqual(perm, [0, 19, 20, 6, 21, 24, 7, 30, 17, 22, 15, 25, 27, 8, 11, 31, 18, 5, 23, 29, 16, 14, 26, 10, 4, 28, 13, 9, 3, 12, 2, 1])
+        
+        # all information about the mls is encoded in the permutation,
+        # the butterfly will use it to know how to fold the samples
+        inplace_permuted_butterfly(samples, perm)
+        self.assertEqual(samples, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -31, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+        
+    def test_inplace_permuted_butterfly_with_own_generated_perms_large(self):
+        poly = 0x1107 # this will be quite large
+        mls = generate_mls(poly)
+        samples = [0] + [2 * x - 1 for x in mls]
+        perm = generate_input_permutation(poly)
+        inplace_permuted_butterfly(samples, perm)
+        
+        # all of them will be 1 except one single element:
+        self.assertEqual(samples, [1]*2288 + [-4095] + [1]*1807)
+        
 
 if __name__ == '__main__':    
     if len(sys.argv) == 1:
-        run_tests()
+        unittest.main(exit=False)
         print "\nusage: ./mlstools.py <function> [<argument> [<argument>]]"
         print "example: ./mlstools.py generate_c 0x211"
     else:
