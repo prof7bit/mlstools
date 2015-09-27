@@ -155,13 +155,17 @@ def inplace_permuted_butterfly(x, perm):
                 
                 
 def find_primitive_poly(poly, degree):
-    """This function does not yet work, it still contains 
-    lots of porting errors, typos, etc.
-    
-    Find primitive polynomial.
+    """Find primitive polynomial.
     Original Pascal code written by Hagen Reddmann, 
     published in https://www.mikrocontroller.net/topic/279499#2950484
     ported to Python more or lesss without modifications.
+    
+    you should not call this directly but instead
+    call the function find_all_primitive_polys()
+    which will make use of this code.
+    
+    Please don't ask me any questions about this 
+    code, ask Hagen instead because he wrote it.'
     """
     assert(degree > 0)
     assert(degree < 32)
