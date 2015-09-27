@@ -1,3 +1,22 @@
+#!/usr/local/bin/instantfpc
+
+{ shebang for instantfpc has been added above,
+  remove it when compiling with regular FPC compiler}
+
+program find_polynoms;
+{$mode objfpc}{$H+}
+
+uses
+    Sysutils;
+
+{ original code by Hagen Reddmann,
+  published in https://www.mikrocontroller.net/topic/279499#2950484
+  This copy is unmodified from the original publication, except for 
+  adding the boilerplate above and the block at the very end to make 
+  it a runnable program }
+
+    
+
 { follow procedures create and check suitable Polynoms for above
   Linear Feedback Shift Registers.
   Such polynoms must be primitive, irreducible to produce maximal
@@ -257,3 +276,27 @@ begin
     Result := PolyIsPrimitive(Poly, Degree, Factors, FactorCount);
   end else Result := False;
 end;
+
+
+
+{below here is code to test the functions above, it does
+not belong to the original publication from Hagen, it is only 
+used to experiment with it and find out how to use it }
+
+var
+    deg: cardinal;
+    poly, poly2: cardinal;
+
+begin
+    deg := 12;
+    poly := 0;
+    while True do begin
+        poly := FindPrimitivePolynom(poly, deg);
+        if poly > 0 then begin
+            poly2 := (poly << 1) or 1;
+            writeln('0x' + inttohex(poly, 0));
+            inc(poly);
+        end else
+            break;
+    end;
+end.
