@@ -1,21 +1,43 @@
 #!/usr/bin/python2
 
+"""functions to generate maximum length sequences and to
+calculate the permutations needed for cross-correlating
+them with the the Fast Hadamard Transform. It has been
+written to assist in preparing data for use in embedded 
+applications. This module can generate C-code (only the 
+arrays, not the code) for the permutation tables. It also 
+shows how to perform the permutation on the fly during the 
+butterfly to reduce memory usage on the target platform.
+
+(c) 2015 Bernd Kreuss <prof7bit@gmail.com>
+"""
+
 import sys
 
 
 def poly_degree(poly):
-    l = 0
+    """Return the degree of the polynominal"""
+    l = -1
     while poly:
         poly >>= 1
         l += 1
-    return l - 1
+    return l
 
 
 def mls_length_from_poly(poly):
+    """Return the period length of the generated mls.
+    This function does NOT check whether it really is
+    a primitive polynominal, it will just calculate
+    how long such an MLS would be."""
     return (2 ** poly_degree(poly)) - 1
 
 
 def generate_mls(poly):
+    """Implement the LFSR and return a list containing 
+    one period of the generated MLS with elements consisting 
+    of 1 or 0. This function will not check whether the 
+    polynominal is really primitive, it will just blindly 
+    assume it is."""
     deg = poly_degree(poly)
     length = mls_length_from_poly(poly)
     register = [1] * deg
@@ -23,17 +45,18 @@ def generate_mls(poly):
 
     # make a list of taps
     taps = []
-    n = 0
+    n = 1
+    poly >>= 1
     while poly > 1:
         if poly & 1:
             taps.append(n)
         poly >>= 1
         n += 1
                 
-    # iterate over the expected length
-    # and apply the feedback taps
+    # iterate over the expected output length while 
+    # performing the feedback and the register rotation
     for i in range(length):
-        feedback = 0
+        feedback = register[0]
         for tap in taps:
             feedback ^= register[tap]
         register.append(feedback)
@@ -43,6 +66,16 @@ def generate_mls(poly):
 
 
 def generate_input_permutation(poly):
+    """Generate the input permutation for the Fast Hadamard.
+    This function will return a permutation vector of length 
+    Period + 1 so that its length is a power of 2. This is 
+    because it is meant to be applied to the input vector AFTER 
+    the input vector has already been prepended with 0 to be 
+    compatible with the implementation of the in-place FHT in 
+    this module. The first element of the vector will be 0 
+    (meaning it will not permute the first element of the 
+    input vector).
+    """
     mls = generate_mls(poly)
     P = len(mls)
     N = poly_degree(poly)
@@ -85,11 +118,21 @@ def generate_input_permutation(poly):
 
 
 def generate_output_permutation(poly):
-    #not yet implemented
+    """not yet implemented"""
     pass
 
 
-def inplace_permutated_butterfly(x, perm):
+def inplace_permuted_butterfly(x, perm):
+    """Apply a 'permuted' butterfly to the input vector x.
+    This function will operate directly on the elements of
+    the input vector x. It will NOT move the positions of its 
+    elements, instead it will apply the permutation to the 
+    butterfly algorithm itself on the fly when accessing the 
+    list. If you  need this function to calculate an impulse 
+    response you must perform  a combined permutation of both 
+    (input and output) to the vector x AFTER this function has
+    been applied. If you only need the highest amplitude you 
+    don't need to apply any permutations at all."""
     assert(len(x) & (len(x)-1) == 0), "length must be power of 2"
     assert(len(x) == len(perm)), "x must have same length as perm"
     assert(perm[0] == 0), "first element of perm must be 0"
@@ -111,6 +154,11 @@ def inplace_permutated_butterfly(x, perm):
                 
 
 def generate_c(poly):
+    """generate C code for an array that holds the permutation
+    vector. It does not generate any other code, you will have 
+    to come up with a port of the inplace_permuted_butterfly() 
+    function suitable and optimized for your specific application
+    yourself."""
     perm = generate_input_permutation(poly)
     count = len(perm)
     
@@ -166,7 +214,7 @@ def test_generate_input_permutation():
     perm = generate_input_permutation(POLY3)
     assert(perm == [0, 4, 5, 7, 3, 6, 2, 1])
 
-def test_inplace_permutated_butterfly():
+def test_inplace_permuted_butterfly():
     # test vectors manually created and found in other examples
     # x and perm prepended with 0 to make them 2^n elements
     x1    = [0,  1,  1,  1, -1,  1, -1, -1]
@@ -177,13 +225,13 @@ def test_inplace_permutated_butterfly():
     x6    = [0,  1, -1,  1, -1, -1,  1,  1]
     x7    = [0,  1,  1, -1,  1, -1, -1,  1]
     perm = [0,  3,  2,  7,  1,  4,  6,  5]
-    inplace_permutated_butterfly(x1, perm)
-    inplace_permutated_butterfly(x2, perm)
-    inplace_permutated_butterfly(x3, perm)
-    inplace_permutated_butterfly(x4, perm)
-    inplace_permutated_butterfly(x5, perm)
-    inplace_permutated_butterfly(x6, perm)
-    inplace_permutated_butterfly(x7, perm)
+    inplace_permuted_butterfly(x1, perm)
+    inplace_permuted_butterfly(x2, perm)
+    inplace_permuted_butterfly(x3, perm)
+    inplace_permuted_butterfly(x4, perm)
+    inplace_permuted_butterfly(x5, perm)
+    inplace_permuted_butterfly(x6, perm)
+    inplace_permuted_butterfly(x7, perm)
     assert(x1 == [1, 1, 1, 1, 1, -7, 1, 1])
     assert(x2 == [1, 1, 1, 1, 1, 1, 1, -7])
     assert(x3 == [1, 1, 1, -7, 1, 1, 1, 1])
@@ -192,7 +240,7 @@ def test_inplace_permutated_butterfly():
     assert(x6 == [1, 1, 1, 1, -7, 1, 1, 1])
     assert(x7 == [1, 1, 1, 1, 1, 1, -7, 1])
     
-def test_inplace_permutated_butterfly_with_own_generated_perms():
+def test_inplace_permuted_butterfly_with_own_generated_perms():
     poly = 0x25
     mls = generate_mls(poly)
     assert(mls == [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
@@ -209,15 +257,15 @@ def test_inplace_permutated_butterfly_with_own_generated_perms():
     
     # all information about the mls is encoded in the permutation,
     # the butterfly will use it to know how to fold the samples
-    inplace_permutated_butterfly(samples, perm)
+    inplace_permuted_butterfly(samples, perm)
     assert(samples == [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -31, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
     
-def test_inplace_permutated_butterfly_with_own_generated_perms_large():
+def test_inplace_permuted_butterfly_with_own_generated_perms_large():
     poly = 0x1107 # this will be quite large
     mls = generate_mls(poly)
     samples = [0] + [2 * x - 1 for x in mls]
     perm = generate_input_permutation(poly)
-    inplace_permutated_butterfly(samples, perm)
+    inplace_permuted_butterfly(samples, perm)
     
     # all of them will be 1 except one single element:
     assert(samples == [1]*2288 + [-4095] + [1]*1807)
