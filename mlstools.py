@@ -24,12 +24,18 @@ def poly_degree(poly):
         l += 1
     return l
 
+
 def rotate(vect, x):
+    """return a rotated list containing the elements of vect 
+    rotated by x elements to the left. Positive values of x
+    rotate to the left, negative values rotate to the right
+    """
     P = len(vect)
     out = [0] * P
     for i in range(P):
         out[i] = vect[(i + x) % P]
     return out
+
 
 def mls_length_from_poly(poly):
     """Return the period length of the generated mls.
@@ -71,17 +77,28 @@ def generate_mls(poly):
 
     return mls
 
+
 def invert_permutation(perm):
+    """Return the permutation vector for the inversion of
+    perm, that is the permutation that when applied after
+    perm would would undo perm and bring all elements back 
+    to where they have been.
+    """
     inv = [0] * len(perm)
     for i in range(len(perm)):
         inv[perm[i]] = i
     return inv
 
+
 def permute(vect, perm):
+    """apply the permutation perm to vect and return a 
+    new list with the permuted elements of vect
+    """
     out = [0] * len(vect)
     for i in range(len(vect)):
         out[i] = vect[perm[i]]
     return out
+
 
 def generate_permutations(poly):
     """Generate the permutations for the Fast Hadamard.
@@ -98,79 +115,66 @@ def generate_permutations(poly):
     N = poly_degree(poly)
     
     # M = LS where
+    # M is a matrix of order P x P and its rows consisting of
+    # the mls rotated one further to the left in each new row
     # L is a matrix of order P x N  
     # S is the N x P matrix formed by the first N rows of M
     #
-    # now lets create the matrix S
-    # there are P columns with N elements,
-    S = [[mls[(i + j) % P] for i in range(N)] for j in range(P)]
-    
-    #print S
-    
-    # interpret each column as a binary number and
-    # make a list of these numbers, along with their
-    # associated column indices. Note that the first
-    # row shall contain the most significant bit.
-    list = []
-    for i in range(P):
-        num = 0
-        for j in range(N):
-            num += S[i][N - j - 1] * (1 << j)
-        list.append((num, i))
-    
-    #print list
-    
-    # now we sort this list by the binary number and this 
-    # will then also reorder the attached column index which 
-    # is then the desired permutation for the input samples.
-    # Because our inplace butterfly will need the permutation
-    # and the samples vector to have a power of 2 elements we
-    # prepend a 0 and make the permutation indices begin at 1
-    list.sort()
-    perm_in = [0]
-    for num,idx in list:
-        perm_in.append(idx + 1)
-    
-    # Now that we have the input permutation
-    # we also need the output permutation. We get
-    # it by constructing L and reordering its rows in a similar way
+    # now lets iterate over the elements of the matrix S
+    # and perform some magic with its columns:
+    tags = [0]
+    for col in range(P):
+        tag = 0
+        bitmask = 1
+        for row in reversed(range(N)):
+            x = mls[(col + row) % P]
+            
+            # interpret each column as a binary number 
+            # (call them 'tags' like in the Borish paper)
+            if x > 0:
+                tag += bitmask
+            bitmask <<= 1
+            
+        # and make a list of them
+        tags.append(tag)
+
+    # these tags are the inverted permutation vector for 
+    # the input samples, so all we need to do is invert it
+    # and we are done. Note that we have prepended a 0 in
+    # front of it and all other elements are > 0. This is
+    # very convenient because later we want to apply it to
+    # sampled data that has a 0 prepended too because of
+    # the 2**N requirement of the butterfly algorithm.
+    perm_in = invert_permutation(tags)
+        
+
+    # now we also need the output permutation
     #
-    # now lets create the matrix L
-    # there are P rows with N elements
-    # 
-    # we construct it by starting again with M
-    # (for convenience this time we would express M as a list of rows)
-    # such a matrix would look like this:
-    #
-    # M = [[mls[(j + i) % P] for i in range(P)] for j in range(P)]
-    #
-    # now reorder the columns (index i) according to perm_in,
-    # we could do the reordering on the fly, so we would replace 
-    # the above list comprehension with this one;
-    # (note that the indices in perm_in[] begin at 1 and not at 0)
-    #
-    # M1 = [[mls[(j + perm_in[i + 1] - 1) % P] for i in range(P)] for j in range(P)]
-    # 
-    # but we are still not done yet, we only need the 1st, 2nd, 4th, ...,  x**(N-1)th 
-    # column of M1 to form the matrix L so that the upper N*N elements of L would
-    # form an identity matrix. We can put all of the above in one monster
-    # list comprehension and our matrix L now looks like this:
-    # (a list of P rows with L elements each):
-    L = [[mls[(j + perm_in[(2**i)] - 1) % P] for i in range(N)] for j in range(P)]
- 
-    # for j in range(P): print L[j];
-    
-    # now we determine the correct row order like we did it above by 
-    # interpreting each row as a binary number, left column (j=0) shall 
-    # be the least significant bit. These values are the permutation vector
+    # again we start with the matrix M like above but this time
+    # we order the columns with the above permutation and we are
+    # not interested in all of the columns but only in the columns
+    # 1, 2, 4, ..., 2**(N-1) of the reordered mnatrix.
+    # The following nested loops will do all of this in one go:
     perm_out = [0]
-    for i in range(P):
-        num = 0
-        for j in range(N):
-            num += L[i][j] * (1 << j)
-        perm_out.insert(1, num)
+    for row in reversed(range(P)):
+        tag = 0
+        bitmask = 1
+        for n in range(N):
+            perm_col = 2**n                     # the column in the permuted matrix
+            real_col = perm_in[perm_col] - 1    # the column in the original matrix
+            x = mls[(row + real_col) % P]
+            
+            # interpret each row as a binary number,
+            # (calling it 'tag' like in the Borish paper)
+            if x > 0:
+                tag |= bitmask
+            bitmask <<= 1
+        
+        # and here these tags ARE the permutation vector!
+        perm_out.append(tag)
 
     return (perm_in, perm_out)
+
 
 def inplace_permuted_butterfly(x, perm):
     """Apply a 'permuted' butterfly to the input vector x.
@@ -395,6 +399,13 @@ def generate_c(poly):
 # ***********************************
 
 class TestCase(unittest.TestCase):
+    def test_invert_permutation(self):
+        p = [0,19,20,6,21,24,7,30,17,22,15,25,27,8,11,31,18,5,23,29,16,14,26,10,4,28,13,9,3,12,2,1]
+        pi = invert_permutation(p)
+        pn = permute(p, pi)
+        self.assertEqual(pi, [0,31,30,28,24,17,3,6,13,27,23,14,29,26,21,10,20,8,16,1,2,4,9,18,5,11,22,12,25,19,7,15])
+        self.assertEqual(pn, [i for i in range(32)])
+    
     def test_rotate(self):
         x = [1,2,3,4,5,6,7,8]
         self.assertEqual(rotate(x,-2), [7,8,1,2,3,4,5,6])
