@@ -66,16 +66,15 @@ def generate_mls(poly):
     return mls
 
 
-def generate_input_permutation(poly):
-    """Generate the input permutation for the Fast Hadamard.
-    This function will return a permutation vector of length 
-    Period + 1 so that its length is a power of 2. This is 
-    because it is meant to be applied to the input vector AFTER 
-    the input vector has already been prepended with 0 to be 
-    compatible with the implementation of the in-place FHT in 
-    this module. The first element of the vector will be 0 
-    (meaning it will not permute the first element of the 
-    input vector).
+def generate_permutations(poly):
+    """Generate the permutations for the Fast Hadamard.
+    This function will return two permutation vectors of length 
+    Period + 1 so that their length is a power of 2. This is 
+    because it is meant to be applied after prepending the 0
+    and before removing it again to be compatible with the 
+    implementation of the in-place FHT in this module. The 
+    first element of the vectors will be 0 (meaning it will 
+    not permute the first element of the vector).
     """
     mls = generate_mls(poly)
     P = len(mls)
@@ -111,17 +110,13 @@ def generate_input_permutation(poly):
     # and the samples vector to have a power of 2 elements we
     # prepend a 0 and make the permutation indices begin at 1
     list.sort()
-    perm = [0]
+    perm_in = [0]
     for num,idx in list:
-        perm.append(idx + 1)
+        perm_in.append(idx + 1)
     
-    return perm
-
-
-def generate_output_permutation(poly):
-    """not yet implemented"""
-    pass
-
+    perm_out = [0] * (N + 1)
+    
+    return (perm_in, perm_out)
 
 def inplace_permuted_butterfly(x, perm):
     """Apply a 'permuted' butterfly to the input vector x.
@@ -314,8 +309,8 @@ def generate_c(poly):
     to come up with a port of the inplace_permuted_butterfly() 
     function suitable and optimized for your specific application
     yourself."""
-    perm = generate_input_permutation(poly)
-    count = len(perm)
+    pi, po = generate_permutations(poly)
+    count = len(pi)
     
     if count > 256:
         type = "uint16_t"
@@ -328,7 +323,7 @@ def generate_c(poly):
     lines = []
     line = []
     for x in range(count):
-        line.append(format % perm[x])
+        line.append(format % pi[x])
         if len(line) == cols:
             lines.append(list(line))
             line = []
@@ -365,11 +360,11 @@ class TestCase(unittest.TestCase):
         self.assertEqual(m4, [1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0])
         self.assertEqual(m5, [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
 
-    def test_generate_input_permutation(self):
+    def test_generate_permutations(self):
         POLY3 = 0x0b
-        perm = generate_input_permutation(POLY3)
-        self.assertEqual(perm, [0, 4, 5, 7, 3, 6, 2, 1])
-
+        pi, po = generate_permutations(POLY3)
+        self.assertEqual(pi, [0, 4, 5, 7, 3, 6, 2, 1])
+        
     def test_inplace_permuted_butterfly(self):
         # test vectors manually created and found in other examples
         # x and perm prepended with 0 to make them 2^n elements
@@ -408,20 +403,20 @@ class TestCase(unittest.TestCase):
         self.assertEqual(samples, [0, 1, 1, 1, 1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, -1, 1, -1, 1, -1, -1, -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, -1])
         
         # the generated permutation already has the 0 prepended for the correct size
-        perm = generate_input_permutation(poly)
-        self.assertEqual(perm, [0, 19, 20, 6, 21, 24, 7, 30, 17, 22, 15, 25, 27, 8, 11, 31, 18, 5, 23, 29, 16, 14, 26, 10, 4, 28, 13, 9, 3, 12, 2, 1])
+        pi, po = generate_permutations(poly)
+        self.assertEqual(pi, [0, 19, 20, 6, 21, 24, 7, 30, 17, 22, 15, 25, 27, 8, 11, 31, 18, 5, 23, 29, 16, 14, 26, 10, 4, 28, 13, 9, 3, 12, 2, 1])
         
         # all information about the mls is encoded in the permutation,
         # the butterfly will use it to know how to fold the samples
-        inplace_permuted_butterfly(samples, perm)
+        inplace_permuted_butterfly(samples, pi)
         self.assertEqual(samples, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -31, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
         
     def test_inplace_permuted_butterfly_with_own_generated_perms_large(self):
         poly = 0x1107 # this will be quite large
         mls = generate_mls(poly)
         samples = [0] + [2 * x - 1 for x in mls]
-        perm = generate_input_permutation(poly)
-        inplace_permuted_butterfly(samples, perm)
+        pi, po = generate_permutations(poly)
+        inplace_permuted_butterfly(samples, pi)
         
         # all of them will be 1 except one single element:
         self.assertEqual(samples, [1]*2288 + [-4095] + [1]*1807)
