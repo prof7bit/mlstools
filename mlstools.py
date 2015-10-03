@@ -65,6 +65,17 @@ def generate_mls(poly):
 
     return mls
 
+def invert_permutation(perm):
+    inv = [0] * len(perm)
+    for i in range(len(perm)):
+        inv[perm[i]] = i
+    return inv
+
+def permute(vect, perm):
+    out = [0] * len(vect)
+    for i in range(len(vect)):
+        out[i] = vect[perm[i]]
+    return out
 
 def generate_permutations(poly):
     """Generate the permutations for the Fast Hadamard.
@@ -114,8 +125,45 @@ def generate_permutations(poly):
     for num,idx in list:
         perm_in.append(idx + 1)
     
-    perm_out = [0] * (N + 1)
+    # Now that we have the input permutation
+    # we also need the output permutation. We get
+    # it by constructing L and reordering its rows in a similar way
+    #
+    # now lets create the matrix L
+    # there are P rows with N elements
+    # 
+    # we construct it by starting again with M
+    # (for convenience this time we would express M as a list of rows)
+    # such a matrix would look like this:
+    #
+    # M = [[mls[(j + i) % P] for i in range(P)] for j in range(P)]
+    #
+    # now reorder the columns (index i) according to perm_in,
+    # we could do the reordering on the fly, so we would replace 
+    # the above list comprehension with this one;
+    # (note that the indices in perm_in[] begin at 1 and not at 0)
+    #
+    # M1 = [[mls[(j + perm_in[i + 1] - 1) % P] for i in range(P)] for j in range(P)]
+    # 
+    # but we are still not done yet, we only need the 1st, 2nd, 4th, ...,  x**(N-1)th 
+    # column of M1 to form the matrix L so that the upper N*N elements of L would
+    # form an identity matrix. We can put all of the above in one monster
+    # list comprehension and our matrix L now looks like this:
+    # (a list of P rows with L elements each):
+    L = [[mls[(j + perm_in[(2**i)] - 1) % P] for i in range(N)] for j in range(P)]
+ 
+    # for j in range(P): print L[j];
     
+    # now we determine the correct row order like we did it above by 
+    # interpreting each row as a binary number, left column (j=0) shall 
+    # be the least significant bit. These values are the permutation vector
+    perm_out = [0]
+    for i in range(P):
+        num = 0
+        for j in range(N):
+            num += L[i][j] * (1 << j)
+        perm_out.insert(1, num)
+
     return (perm_in, perm_out)
 
 def inplace_permuted_butterfly(x, perm):
@@ -359,38 +407,67 @@ class TestCase(unittest.TestCase):
         self.assertEqual(m3, [1, 1, 1, 0, 0, 1, 0])
         self.assertEqual(m4, [1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0])
         self.assertEqual(m5, [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
-
+    
     def test_generate_permutations(self):
         POLY3 = 0x0b
         pi, po = generate_permutations(POLY3)
         self.assertEqual(pi, [0, 4, 5, 7, 3, 6, 2, 1])
+        self.assertEqual(po, [0, 5, 7, 3, 6, 1, 2, 4])
         
     def test_inplace_permuted_butterfly(self):
-        # test vectors manually created and found in other examples
-        # x and perm prepended with 0 to make them 2^n elements
-        x1    = [0,  1,  1,  1, -1,  1, -1, -1]
-        x2    = [0, -1,  1,  1,  1, -1,  1, -1]
-        x3    = [0, -1, -1,  1,  1,  1, -1,  1]
-        x4    = [0,  1, -1, -1,  1,  1,  1, -1]
-        x5    = [0, -1,  1, -1, -1,  1,  1,  1]
-        x6    = [0,  1, -1,  1, -1, -1,  1,  1]
-        x7    = [0,  1,  1, -1,  1, -1, -1,  1]
-        perm = [0,  3,  2,  7,  1,  4,  6,  5]
-        inplace_permuted_butterfly(x1, perm)
-        inplace_permuted_butterfly(x2, perm)
-        inplace_permuted_butterfly(x3, perm)
-        inplace_permuted_butterfly(x4, perm)
-        inplace_permuted_butterfly(x5, perm)
-        inplace_permuted_butterfly(x6, perm)
-        inplace_permuted_butterfly(x7, perm)
-        self.assertEqual(x1, [1, 1, 1, 1, 1, -7, 1, 1])
-        self.assertEqual(x2, [1, 1, 1, 1, 1, 1, 1, -7])
-        self.assertEqual(x3, [1, 1, 1, -7, 1, 1, 1, 1])
-        self.assertEqual(x4, [1, -7, 1, 1, 1, 1, 1, 1])
-        self.assertEqual(x5, [1, 1, -7, 1, 1, 1, 1, 1])
-        self.assertEqual(x6, [1, 1, 1, 1, -7, 1, 1, 1])
-        self.assertEqual(x7, [1, 1, 1, 1, 1, 1, -7, 1])
+        poly = 0x25
+        #poly = 0x0b
+        mls = generate_mls(poly)
+        P = mls_length_from_poly(poly)
         
+        # generate some sample data by rotating the mls
+        # P times, prepending the 0 and also generate the
+        # expected correlation results for each of them
+        siglist = []
+        reslist = []
+        P = len(mls)
+        for i in range(P):
+            sig = [0]
+            for j in range(P):
+                sig.append(2 * mls[(i+j) % P] - 1)
+
+            res = [1]
+            res += [1]*(P-i-1)
+            res += [-P] 
+            res += [1]*i 
+                
+            siglist.append(sig)
+            reslist.append(res)
+            
+            # example siglist
+            # [0, 1, 1, 1, -1, -1, 1, -1]
+            # [0, 1, 1, -1, -1, 1, -1, 1]
+            # [0, 1, -1, -1, 1, -1, 1, 1]
+            # [0, -1, -1, 1, -1, 1, 1, 1]
+            # [0, -1, 1, -1, 1, 1, 1, -1]
+            # [0, 1, -1, 1, 1, 1, -1, -1]
+            # [0, -1, 1, 1, 1, -1, -1, 1]
+            #
+            # example reslist:
+            # [1, 1, 1, 1, 1, 1, 1, -7]
+            # [1, 1, 1, 1, 1, 1, -7, 1]
+            # [1, 1, 1, 1, 1, -7, 1, 1]
+            # [1, 1, 1, 1, -7, 1, 1, 1]
+            # [1, 1, 1, -7, 1, 1, 1, 1]
+            # [1, 1, -7, 1, 1, 1, 1, 1]
+            # [1, -7, 1, 1, 1, 1, 1, 1]
+        
+        p1, p2 = generate_permutations(poly)
+        
+        # combined permutation: first p1 then p2
+        p3 = permute(p1, p2)
+        
+        for i in range(len(siglist)):
+            sig = siglist[i]
+            inplace_permuted_butterfly(sig, p1)
+            res = permute(sig, p3)
+            self.assertEqual(res, reslist[i])
+
     def test_inplace_permuted_butterfly_with_own_generated_perms(self):
         poly = 0x25
         mls = generate_mls(poly)
