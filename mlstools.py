@@ -490,7 +490,7 @@ class TestCase(unittest.TestCase):
             res = permute(sig, p3)
             self.assertEqual(res, reslist[i])
 
-    def test_inplace_permuted_butterfly_with_own_generated_perms(self):
+    def test_inplace_permuted_butterfly_more(self):
         poly = 0x25
         mls = generate_mls(poly)
         self.assertEqual(mls, [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
@@ -510,7 +510,7 @@ class TestCase(unittest.TestCase):
         inplace_permuted_butterfly(samples, pi)
         self.assertEqual(samples, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -31, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
         
-    def test_inplace_permuted_butterfly_with_own_generated_perms_large(self):
+    def test_inplace_permuted_butterfly_large_example(self):
         poly = 0x1107 # this will be quite large
         mls = generate_mls(poly)
         samples = [0] + [2 * x - 1 for x in mls]
