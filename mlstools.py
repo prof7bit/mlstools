@@ -24,6 +24,12 @@ def poly_degree(poly):
         l += 1
     return l
 
+def rotate(vect, x):
+    P = len(vect)
+    out = [0] * P
+    for i in range(P):
+        out[i] = vect[(i + x) % P]
+    return out
 
 def mls_length_from_poly(poly):
     """Return the period length of the generated mls.
@@ -389,6 +395,11 @@ def generate_c(poly):
 # ***********************************
 
 class TestCase(unittest.TestCase):
+    def test_rotate(self):
+        x = [1,2,3,4,5,6,7,8]
+        self.assertEqual(rotate(x,-2), [7,8,1,2,3,4,5,6])
+        self.assertEqual(rotate(x, 2), [3,4,5,6,7,8,1,2])
+    
     def test_poly_degree(self):
         self.assertEqual(poly_degree(0x0b), 3)
         self.assertEqual(poly_degree(0x1053), 12)
@@ -414,6 +425,22 @@ class TestCase(unittest.TestCase):
         self.assertEqual(pi, [0, 4, 5, 7, 3, 6, 2, 1])
         self.assertEqual(po, [0, 5, 7, 3, 6, 1, 2, 4])
         
+    def test_generate_permutations2(self):
+        poly = 0x19
+        mls = generate_mls(poly)
+        self.assertEqual(mls, [1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0])
+        
+        mls1 = [0] + rotate(mls, 0)
+        mls2 = [0] + rotate(mls, 1)
+        mls3 = [0] + rotate(mls, 2)
+        mls4 = [0] + rotate(mls, 3)
+        
+        pi, po = generate_permutations(poly)
+        self.assertEqual(permute(mls1, pi), [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1])
+        self.assertEqual(permute(mls2, pi), [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1])
+        self.assertEqual(permute(mls3, pi), [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1])
+        self.assertEqual(permute(mls4, pi), [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+    
     def test_inplace_permuted_butterfly(self):
         poly = 0x25
         #poly = 0x0b
@@ -426,16 +453,11 @@ class TestCase(unittest.TestCase):
         siglist = []
         reslist = []
         P = len(mls)
+        sig0 = [2 * x - 1 for x in mls]
+        res0 = [1] * (P - 1) + [-P]
         for i in range(P):
-            sig = [0]
-            for j in range(P):
-                sig.append(2 * mls[(i+j) % P] - 1)
-
-            res = [1]
-            res += [1]*(P-i-1)
-            res += [-P] 
-            res += [1]*i 
-                
+            sig = [0] + rotate(sig0, i)
+            res = [1] + rotate(res0, i)
             siglist.append(sig)
             reslist.append(res)
             
@@ -456,7 +478,7 @@ class TestCase(unittest.TestCase):
             # [1, 1, 1, -7, 1, 1, 1, 1]
             # [1, 1, -7, 1, 1, 1, 1, 1]
             # [1, -7, 1, 1, 1, 1, 1, 1]
-        
+            
         p1, p2 = generate_permutations(poly)
         
         # combined permutation: first p1 then p2
