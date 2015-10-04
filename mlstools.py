@@ -5,15 +5,23 @@ calculate the permutations needed for cross-correlating
 them with the the Fast Hadamard Transform. It has been
 written to assist in preparing data for use in embedded 
 applications. This module can generate C-code (only the 
-arrays, not the code) for the permutation tables. It also 
-shows how to perform the permutation on the fly during the 
-butterfly to reduce memory usage on the target platform.
+arrays, not the code) for the permutation tables.
 
 (c) 2015 Bernd Kreuss <prof7bit@gmail.com>
 """
 
 import math
 import unittest
+
+def debug_print(vect, n=2):
+    """print a list or a list of lists"""
+    for x in vect:
+        if type(x) is list:
+            debug_print(x, n)
+        else:
+            print "%*g" % (n,x),
+    print
+
 
 def poly_degree(poly):
     """Return the degree of the polynomial"""
@@ -99,7 +107,7 @@ def permute(vect, perm):
     return out
 
 
-def generate_permutations(poly):
+def generate_permutations_old(poly):
     """Generate the permutations for the Fast Hadamard.
     This function will return two permutation vectors of length 
     Period + 1 so that their length is a power of 2. This is 
@@ -175,35 +183,123 @@ def generate_permutations(poly):
     return (perm_in, perm_out)
 
 
-def inplace_permuted_butterfly(x, perm):
-    """Apply a 'permuted' butterfly to the input vector x.
-    This function will operate directly on the elements of
-    the input vector x. It will NOT move the positions of its 
-    elements, instead it will apply the permutation to the 
-    butterfly algorithm itself on the fly when accessing the 
-    list. If you  need this function to calculate an impulse 
-    response you must perform  a combined permutation of both 
-    (input and output) to the vector x AFTER this function has
-    been applied. If you only need the highest amplitude you 
-    don't need to apply any permutations at all."""
-    assert(len(x) & (len(x)-1) == 0), "length must be power of 2"
-    assert(len(x) == len(perm)), "x must have same length as perm"
-    assert(perm[0] == 0), "first element of perm must be 0"
-    assert(min(perm) == 0), "no negative elements allowed in perm"
-    assert(max(perm) == len(perm) - 1), "greatest element must be len-1"
+def generate_permutations(poly):
+    """Generate the permutations for the Fast Hadamard.
+    This function will return two permutation vectors of length 
+    Period + 1 so that their length is a power of 2. This is 
+    because it is meant to be applied after prepending the 0
+    and before removing it again to be compatible with the 
+    implementation of the butterfly in this module. The 
+    first element of the vectors will be 0 (meaning it will 
+    not permute the first element of the vector).
     
+    This function implementing the algorithm described in
+    J. Borish & J. B. Angell, "An Efficient Algorithm for 
+    Measuring the Impulse Response Using Pseudrandom Noise," 
+    J. Audio Eng. Soc., vol. 31, pp. 478-489 (1983) 
+    """
+    mls = generate_mls(poly)
+    P = len(mls)
+    N = poly_degree(poly)
+
+    # As illustrated in Borish's paper, fig. 5 we
+    # construct the PxP matrix of shifted mls and
+    # determine the 'tags' from the first N rows.
+    tags = [0]
+    for col in range(P):
+        tag = 0
+        bitmask = 1
+        for row in range(N):
+            x = mls[(col - row) % P]
+            
+            # interpret each column as a binary number, 
+            # call them 'tags' like in the Borish paper
+            if x > 0:
+                tag |= bitmask
+            bitmask <<= 1
+        
+        # and make a list of them
+        tags.append(tag)
+
+    # these tags are the inverted permutation vector for 
+    # the input samples, so all we need to do is invert it
+    # and we are done. Note that we have prepended a 0 in
+    # front of it and all other elements are > 0. This is
+    # very convenient because later we want to apply it to
+    # sampled data that has a 0 prepended too because of
+    # the 2**N requirement of the butterfly algorithm.
+    perm_in = invert_permutation(tags)
+        
+
+    # now we also need the output permutation
+    #
+    # This is illustrated in Borish's paper in fig. 7.
+    # Again we start with the matrix M like above but this time
+    # we rearrange the columns with the above column permutation
+    # and from that matrix we pick only the columns
+    # 1, 2, 4, ..., 2**(N-1) to supply the bits for the tags.
+    # The following nested loops will do this in one go:
+    perm_out = [0]
+    for row in range(P):
+        tag = 0
+        bitmask = 1
+        for n in range(N):
+            perm_col = 2**n                     # the neeed column in the permuted matrix
+            real_col = perm_in[perm_col] - 1    # corresponding column in original matrix
+            x = mls[(real_col - row) % P]
+            
+            # interpret each row as a binary number,
+            # (calling it 'tag' like in the Borish paper)
+            if x > 0:
+                tag |= bitmask
+            bitmask <<= 1
+        
+        # and here these tags ARE the permutation vector!
+        perm_out.append(tag)
+
+    return (perm_in, perm_out)
+
+
+def butterfly(x, shave_bits=0):
+    """Apply the butterfly algorithm to the input vector x.
+    This function will operate directly on the elements of
+    the input vector x. The samples must first be permuted
+    with the input permutation, then the butterfly can be
+    applied and afterwards they need to be permuted with 
+    the output permutation to bring the result into the 
+    correct chronologiocal order again.
+    
+    When shave_bits > 0 then it will shave off the least 
+    significant bit with a division by two during each 
+    of the last n rounds, where n=shave_bits. This trick
+    is not needed when running this algorithm in python on
+    a pc but it is of great usefulness when implementing this 
+    algorithm on a small microcontroller where only short 
+    integers can be used to hold the huge sample arrays.
+    """
+    assert(len(x) & (len(x)-1) == 0), "length must be power of 2"
     samples = len(x)
     span = samples
     while span > 1:
         next = span
         span = span >> 1
-        for j in range(0, span):
-            i = j
-            while i < samples:
-                temp                = x[perm[i + span]]
-                x[perm[i + span]]   = x[perm[i]] - temp
-                x[perm[i]]          = x[perm[i]] + temp
-                i += next    
+        shave_last_bit = (span < (1 << shave_bits))
+        if shave_last_bit:
+            for j in range(0, span):
+                i = j
+                while i < samples:
+                    temp            = x[i + span]
+                    x[i + span]     = (x[i] - temp) / 2
+                    x[i]            = (x[i] + temp) / 2
+                    i += next
+        else:
+            for j in range(0, span):
+                i = j
+                while i < samples:
+                    temp            = x[i + span]
+                    x[i + span]     = x[i] - temp
+                    x[i]            = x[i] + temp
+                    i += next
                 
                 
 def find_primitive_poly(poly, degree):
@@ -387,11 +483,10 @@ def generate_c_array(name, arr):
 
 
 def generate_c(poly):
-    """generate C code for an array that holds the permutation
-    vector. It does not generate any other code, you will have 
-    to come up with a port of the inplace_permuted_butterfly() 
-    function suitable and optimized for your specific application
-    yourself."""
+    """generate C code for an arrays that holds the permutation
+    vectors. It does not generate any other code, you will have 
+    to come up with a port of the butterfly() function suitable 
+    and optimized for your specific application yourself."""
 
     pi, po = generate_permutations(poly)
     code =  generate_c_array("input_permutation", pi)
@@ -438,26 +533,10 @@ class TestCase(unittest.TestCase):
     def test_generate_permutations(self):
         POLY3 = 0x0b
         pi, po = generate_permutations(POLY3)
-        self.assertEqual(pi, [0, 4, 5, 7, 3, 6, 2, 1])
-        self.assertEqual(po, [0, 5, 7, 3, 6, 1, 2, 4])
+        self.assertEqual(pi, [0, 6, 7, 2, 5, 1, 4, 3])
+        self.assertEqual(po, [0, 1, 2, 4, 5, 7, 3, 6])
         
-    def test_generate_permutations2(self):
-        poly = 0x19
-        mls = generate_mls(poly)
-        self.assertEqual(mls, [1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0])
-        
-        mls1 = [0] + rotate(mls, 0)
-        mls2 = [0] + rotate(mls, 1)
-        mls3 = [0] + rotate(mls, 2)
-        mls4 = [0] + rotate(mls, 3)
-        
-        pi, po = generate_permutations(poly)
-        self.assertEqual(permute(mls1, pi), [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1])
-        self.assertEqual(permute(mls2, pi), [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1])
-        self.assertEqual(permute(mls3, pi), [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1])
-        self.assertEqual(permute(mls4, pi), [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
-    
-    def test_inplace_permuted_butterfly(self):
+    def test_butterfly(self):
         poly = 0x25
         #poly = 0x0b
         mls = generate_mls(poly)
@@ -466,75 +545,49 @@ class TestCase(unittest.TestCase):
         # generate some sample data by rotating the mls
         # P times, prepending the 0 and also generate the
         # expected correlation results for each of them
-        siglist = []
+        smplist = []
         reslist = []
         P = len(mls)
-        sig0 = [2 * x - 1 for x in mls]
-        res0 = [1] * (P - 1) + [-P]
+        smp0 = [2 * x - 1 for x in mls]
+        res0 = [-P] + [1] * (P - 1)
         for i in range(P):
-            sig = [0] + rotate(sig0, i)
-            res = [1] + rotate(res0, i)
-            siglist.append(sig)
+            smp = [0] + rotate(smp0, -i)
+            res = [1] + rotate(res0, -i)
+            smplist.append(smp)
             reslist.append(res)
             
-            # example siglist
-            # [0, 1, 1, 1, -1, -1, 1, -1]
-            # [0, 1, 1, -1, -1, 1, -1, 1]
-            # [0, 1, -1, -1, 1, -1, 1, 1]
-            # [0, -1, -1, 1, -1, 1, 1, 1]
-            # [0, -1, 1, -1, 1, 1, 1, -1]
-            # [0, 1, -1, 1, 1, 1, -1, -1]
-            # [0, -1, 1, 1, 1, -1, -1, 1]
-            #
-            # example reslist:
-            # [1, 1, 1, 1, 1, 1, 1, -7]
-            # [1, 1, 1, 1, 1, 1, -7, 1]
-            # [1, 1, 1, 1, 1, -7, 1, 1]
-            # [1, 1, 1, 1, -7, 1, 1, 1]
-            # [1, 1, 1, -7, 1, 1, 1, 1]
-            # [1, 1, -7, 1, 1, 1, 1, 1]
-            # [1, -7, 1, 1, 1, 1, 1, 1]
+        #debug_print(smplist, 3)
+        #debug_print(reslist, 3)
             
         p1, p2 = generate_permutations(poly)
+                
+        for i in range(len(smplist)):
+            samples = permute(smplist[i], p1)
+            butterfly(samples)
+            result = permute(samples, p2)
+            self.assertEqual(result, reslist[i])
         
-        # combined permutation: first p1 then p2
-        p3 = permute(p1, p2)
-        
-        for i in range(len(siglist)):
-            sig = siglist[i]
-            inplace_permuted_butterfly(sig, p1)
-            res = permute(sig, p3)
-            self.assertEqual(res, reslist[i])
-
-    def test_inplace_permuted_butterfly_more(self):
-        poly = 0x25
-        mls = generate_mls(poly)
-        self.assertEqual(mls, [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
-        
-        # We need a power of 2 number of measurement samples for the
-        # inplace-butterfly. We create them directly from the mls and
-        # prepend 0 as the first element.
-        samples = [0] + [2 * x - 1 for x in mls]
-        self.assertEqual(samples, [0, 1, 1, 1, 1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, -1, 1, -1, 1, -1, -1, -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, -1])
-        
-        # the generated permutation already has the 0 prepended for the correct size
-        pi, po = generate_permutations(poly)
-        self.assertEqual(pi, [0, 19, 20, 6, 21, 24, 7, 30, 17, 22, 15, 25, 27, 8, 11, 31, 18, 5, 23, 29, 16, 14, 26, 10, 4, 28, 13, 9, 3, 12, 2, 1])
-        
-        # all information about the mls is encoded in the permutation,
-        # the butterfly will use it to know how to fold the samples
-        inplace_permuted_butterfly(samples, pi)
-        self.assertEqual(samples, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -31, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
-        
-    def test_inplace_permuted_butterfly_large_example(self):
+    def test_butterfly_large_with_shave(self):
         poly = 0x1107 # this will be quite large
         mls = generate_mls(poly)
-        samples = [0] + [2 * x - 1 for x in mls]
-        pi, po = generate_permutations(poly)
-        inplace_permuted_butterfly(samples, pi)
         
-        # all of them will be 1 except one single element:
-        self.assertEqual(samples, [1]*2288 + [-4095] + [1]*1807)
+        # simulate samples that were made with a 12bit ADC
+        # and use the full range. This would cause the maximum
+        # possible correlation result to overflow an int16_t
+        # by orders of magnitude if we would not already begin
+        # shaving off bits  during the butterfly.
+        samples = [0] + [4095 * x - 2048 for x in mls]
+        
+        pi, po = generate_permutations(poly)
+        samples = permute(samples, pi)
+        
+        # we must shave off at least 8 bits to make it not 
+        # overflow a 16 bit signed integer.
+        butterfly(samples, 8)
+        
+        #print samples
+        # the peak is at index 2048:
+        self.assertEqual(min(samples), -32752)
         
     def test_hagens_code(self):
         degree = 8
