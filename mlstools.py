@@ -117,7 +117,7 @@ def generate_permutations(poly):
     first element of the vectors will be 0 (meaning it will 
     not permute the first element of the vector).
     
-    This function implementing the algorithm described in
+    This function implements the algorithm described in
     J. Borish & J. B. Angell, "An Efficient Algorithm for 
     Measuring the Impulse Response Using Pseudrandom Noise," 
     J. Audio Eng. Soc., vol. 31, pp. 478-489 (1983) 
