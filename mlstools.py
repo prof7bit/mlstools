@@ -509,8 +509,7 @@ class TestCase(unittest.TestCase):
         # overflow a 16 bit signed integer.
         butterfly(samples, 8)
         
-        #print samples
-        # the peak is at index 2048:
+        #debug_print(samples)
         self.assertEqual(min(samples), -32752)
         
     def test_hagens_code(self):
