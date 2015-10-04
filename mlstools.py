@@ -12,7 +12,6 @@ butterfly to reduce memory usage on the target platform.
 (c) 2015 Bernd Kreuss <prof7bit@gmail.com>
 """
 
-import sys
 import math
 import unittest
 
@@ -361,14 +360,8 @@ def find_all_primitive_polys(degree):
             return results
 
 
-def generate_c(poly):
-    """generate C code for an array that holds the permutation
-    vector. It does not generate any other code, you will have 
-    to come up with a port of the inplace_permuted_butterfly() 
-    function suitable and optimized for your specific application
-    yourself."""
-    pi, po = generate_permutations(poly)
-    count = len(pi)
+def generate_c_array(name, arr):
+    count = len(arr)
     
     if count > 256:
         type = "uint16_t"
@@ -381,7 +374,7 @@ def generate_c(poly):
     lines = []
     line = []
     for x in range(count):
-        line.append(format % pi[x])
+        line.append(format % arr[x])
         if len(line) == cols:
             lines.append(list(line))
             line = []
@@ -390,8 +383,20 @@ def generate_c(poly):
     
     lines = [", ".join(line) for line in lines]
     datablock = "    " + ",\n    ".join(lines)
-    return ("const %s input_permutation[%g] = {\n" % (type, count)) + datablock + "\n};\n"
+    return ("const %s %s[%g] = {\n" % (type, name, count)) + datablock + "\n};\n\n"
 
+
+def generate_c(poly):
+    """generate C code for an array that holds the permutation
+    vector. It does not generate any other code, you will have 
+    to come up with a port of the inplace_permuted_butterfly() 
+    function suitable and optimized for your specific application
+    yourself."""
+
+    pi, po = generate_permutations(poly)
+    code =  generate_c_array("input_permutation", pi)
+    code += generate_c_array("output_permutation", po)
+    return code
 
 
 # ***********************************
@@ -536,11 +541,5 @@ class TestCase(unittest.TestCase):
         results = find_all_primitive_polys(degree)
         self.assertEqual(results, [285, 299, 301, 333, 351, 355, 357, 361, 369, 391, 397, 425, 451, 463, 487, 501])
         
-
 if __name__ == '__main__':    
-    if len(sys.argv) == 1:
-        unittest.main(exit=False)
-        print "\nusage: ./mlstools.py <function> [<argument> [<argument>]]"
-        print "example: ./mlstools.py generate_c 0x211"
-    else:
-        print eval(sys.argv[1] + "(" + ",".join(sys.argv[2:]) + ")")
+    unittest.main(exit=False)
