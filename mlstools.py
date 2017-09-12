@@ -3,8 +3,8 @@
 """functions to generate maximum length sequences and to
 calculate the permutations needed for cross-correlating
 them with the the Fast Hadamard Transform. It has been
-written to assist in preparing data for use in embedded 
-applications. This module can generate C-code (only the 
+written to assist in preparing data for use in embedded
+applications. This module can generate C-code (only the
 arrays, not the code) for the permutation tables.
 
 (c) 2015 Bernd Kreuss <prof7bit@gmail.com>
@@ -19,7 +19,7 @@ def debug_print(vect, n=2):
         if type(x) is list:
             debug_print(x, n)
         else:
-            print "%*g" % (n,x),
+            print ("%*g" % (n,x),)
     print
 
 
@@ -33,7 +33,7 @@ def poly_degree(poly):
 
 
 def rotate(vect, x):
-    """return a rotated list containing the elements of vect 
+    """return a rotated list containing the elements of vect
     rotated by x elements to the left. Positive values of x
     rotate to the left, negative values rotate to the right
     """
@@ -53,10 +53,10 @@ def mls_length_from_poly(poly):
 
 
 def generate_mls(poly):
-    """Implement the LFSR and return a list containing 
-    one period of the generated MLS with elements consisting 
-    of 1 or 0. This function will not check whether the 
-    polynomial is really primitive, it will just blindly 
+    """Implement the LFSR and return a list containing
+    one period of the generated MLS with elements consisting
+    of 1 or 0. This function will not check whether the
+    polynomial is really primitive, it will just blindly
     assume it is."""
     deg = poly_degree(poly)
     length = mls_length_from_poly(poly)
@@ -72,8 +72,8 @@ def generate_mls(poly):
             taps.append(n)
         poly >>= 1
         n += 1
-                
-    # iterate over the expected output length while 
+
+    # iterate over the expected output length while
     # performing the feedback and the register rotation
     for i in range(length):
         feedback = register[0]
@@ -88,7 +88,7 @@ def generate_mls(poly):
 def invert_permutation(perm):
     """Return the permutation vector for the inversion of
     perm, that is the permutation that when applied after
-    perm would would undo perm and bring all elements back 
+    perm would would undo perm and bring all elements back
     to where they have been.
     """
     inv = [0] * len(perm)
@@ -98,7 +98,7 @@ def invert_permutation(perm):
 
 
 def permute(vect, perm):
-    """apply the permutation perm to vect and return a 
+    """apply the permutation perm to vect and return a
     new list with the permuted elements of vect
     """
     out = [0] * len(vect)
@@ -109,18 +109,18 @@ def permute(vect, perm):
 
 def generate_permutations(poly):
     """Generate the permutations for the Fast Hadamard.
-    This function will return two permutation vectors of length 
-    Period + 1 so that their length is a power of 2. This is 
+    This function will return two permutation vectors of length
+    Period + 1 so that their length is a power of 2. This is
     because it is meant to be applied after prepending the 0
-    and before removing it again to be compatible with the 
-    implementation of the butterfly in this module. The 
-    first element of the vectors will be 0 (meaning it will 
+    and before removing it again to be compatible with the
+    implementation of the butterfly in this module. The
+    first element of the vectors will be 0 (meaning it will
     not permute the first element of the vector).
-    
+
     This function implements the algorithm described in
-    J. Borish & J. B. Angell, "An Efficient Algorithm for 
-    Measuring the Impulse Response Using Pseudrandom Noise," 
-    J. Audio Eng. Soc., vol. 31, pp. 478-489 (1983) 
+    J. Borish & J. B. Angell, "An Efficient Algorithm for
+    Measuring the Impulse Response Using Pseudrandom Noise,"
+    J. Audio Eng. Soc., vol. 31, pp. 478-489 (1983)
     """
     mls = generate_mls(poly)
     P = len(mls)
@@ -135,17 +135,17 @@ def generate_permutations(poly):
         bitmask = 1
         for row in range(N):
             x = mls[(col - row) % P]
-            
-            # interpret each column as a binary number, 
+
+            # interpret each column as a binary number,
             # call them 'tags' like in the Borish paper
             if x > 0:
                 tag |= bitmask
             bitmask <<= 1
-        
+
         # and make a list of them
         tags.append(tag)
 
-    # these tags are the inverted permutation vector for 
+    # these tags are the inverted permutation vector for
     # the input samples, so all we need to do is invert it
     # and we are done. Note that we have prepended a 0 in
     # front of it and all other elements are > 0. This is
@@ -153,7 +153,7 @@ def generate_permutations(poly):
     # sampled data that has a 0 prepended too because of
     # the 2**N requirement of the butterfly algorithm.
     perm_in = invert_permutation(tags)
-        
+
 
     # now we also need the output permutation
     #
@@ -171,13 +171,13 @@ def generate_permutations(poly):
             perm_col = 2**n                     # the neeed column in the permuted matrix
             real_col = perm_in[perm_col] - 1    # corresponding column in original matrix
             x = mls[(real_col - row) % P]
-            
+
             # interpret each row as a binary number,
             # (calling it 'tag' like in the Borish paper)
             if x > 0:
                 tag |= bitmask
             bitmask <<= 1
-        
+
         # and here these tags ARE the permutation vector!
         perm_out.append(tag)
 
@@ -189,16 +189,16 @@ def butterfly(x, shave_bits=0):
     This function will operate directly on the elements of
     the input vector x. The samples must first be permuted
     with the input permutation, then the butterfly can be
-    applied and afterwards they need to be permuted with 
-    the output permutation to bring the result into the 
+    applied and afterwards they need to be permuted with
+    the output permutation to bring the result into the
     correct chronologiocal order again.
-    
-    When shave_bits > 0 then it will shave off the least 
-    significant bit with a division by two during each 
+
+    When shave_bits > 0 then it will shave off the least
+    significant bit with a division by two during each
     of the last n rounds, where n=shave_bits. This trick
     is not needed when running this algorithm in python on
-    a pc but it is of great usefulness when implementing this 
-    algorithm on a small microcontroller where only short 
+    a pc but it is of great usefulness when implementing this
+    algorithm on a small microcontroller where only short
     integers can be used to hold the huge sample arrays.
     """
     assert(len(x) & (len(x)-1) == 0), "length must be power of 2"
@@ -224,24 +224,24 @@ def butterfly(x, shave_bits=0):
                     x[i + span]     = x[i] - temp
                     x[i]            = x[i] + temp
                     i += next
-                
-                
+
+
 def find_primitive_poly(poly, degree):
     """Find primitive polynomial.
-    Original Pascal code written by Hagen Reddmann, 
+    Original Pascal code written by Hagen Reddmann,
     published in https://www.mikrocontroller.net/topic/279499#2950484
     ported to Python more or lesss without modifications.
-    
+
     you should not call this directly but instead
     call the function find_all_primitive_polys()
     which will make use of this code.
-    
-    Please don't ask me any questions about this 
+
+    Please don't ask me any questions about this
     code, ask Hagen instead because he wrote it.'
     """
     assert(degree > 0)
     assert(degree < 32)
-    
+
     def even_parity(poly):
         """returns TRUE if count of bits set to 1 in Poly is even"""
         p = True
@@ -250,7 +250,7 @@ def find_primitive_poly(poly, degree):
                 p = not p
             poly >>= 1
         return p
-    
+
     def poly_init(M, poly, degree):
         l = 0x80000000
         M[degree - 1] = l
@@ -261,11 +261,11 @@ def find_primitive_poly(poly, degree):
             if poly & 1:
                 M[i] |= 0x80000000
             poly >>= 1
-            
+
     def poly_copy(D, S):
         for i in range(len(S)):
             D[i] = S[i]
-    
+
     def poly_mul(R, M, degree):
         T = [0] * 32 # TPolyMatrix
         for i in range(degree):
@@ -277,7 +277,7 @@ def find_primitive_poly(poly, degree):
                 n <<= 1
             T[i] = d
         poly_copy(R, T)
-        
+
     def poly_pow_mod(R, M, n, degree):
         poly_copy(R, M)
         l = 0x80000000
@@ -288,7 +288,7 @@ def find_primitive_poly(poly, degree):
             poly_mul(R, R, degree)
             if (l & n) != 0:
                 poly_mul(R, M, degree)
-    
+
     def poly_is_primitive(poly, degree, factors, factor_count):
         P = [0] * 32   # TPolyMatrix in original pascal code
         M = [0] * 32
@@ -307,7 +307,7 @@ def find_primitive_poly(poly, degree):
                 else:
                     return False
         return False
-    
+
     def factor_order(factors, degree):
         """find factors of 2^Degree-1 = possible Order of Polynom
         can be surrely more optimized, but the runtime here is not important yet
@@ -333,12 +333,12 @@ def find_primitive_poly(poly, degree):
                 bound = int(round(math.sqrt(rest)))
             else:
                 prime += 2
-        if result > 0: 
+        if result > 0:
             # only if 2^Degree-1 itself isn't prime
             factors[result] = order // rest
             result += 1
         return result
-    
+
     factors = [0] * 6
     mask = 0xffffffff >> (32 - degree)
     poly = (poly & mask) | (1 << (degree - 1))
@@ -355,16 +355,16 @@ def find_primitive_poly(poly, degree):
 
 def find_all_primitive_polys(degree):
     """Find all primitive polynomials of certain degree.
-    Each polynomial is represented by a binary number 
-    where the nth bit represents the term x^n. for 
+    Each polynomial is represented by a binary number
+    where the nth bit represents the term x^n. for
     example consider the polynomial:
-    
+
         x^4 + x + 1
-        
+
     this would be represented by the binary number
-    
+
         10011
-        
+
     all functions in this module are using the same
     binary representation for the polynomials.
     """
@@ -372,7 +372,7 @@ def find_all_primitive_polys(degree):
     results = []
     while True:
         poly = find_primitive_poly(poly, degree)
-        if poly > 0:
+        if poly and (poly > 0):
             poly_with_1 = (poly << 1) | 1
             results.append(poly_with_1)
             poly += 1
@@ -382,14 +382,14 @@ def find_all_primitive_polys(degree):
 
 def generate_c_array(name, arr):
     count = len(arr)
-    
+
     if count > 256:
         type = "uint16_t"
         format = "%5i"
     else:
         type = "uint8_t"
         format = "%3i"
-    
+
     cols = 16
     lines = []
     line = []
@@ -400,7 +400,7 @@ def generate_c_array(name, arr):
             line = []
     if len(line):
         lines.append(list(line))
-    
+
     lines = [", ".join(line) for line in lines]
     datablock = "    " + ",\n    ".join(lines)
     return ("const %s %s[%g] = {\n" % (type, name, count)) + datablock + "\n};\n\n"
@@ -408,8 +408,8 @@ def generate_c_array(name, arr):
 
 def generate_c(poly):
     """generate C code for an arrays that holds the permutation
-    vectors. It does not generate any other code, you will have 
-    to come up with a port of the butterfly() function suitable 
+    vectors. It does not generate any other code, you will have
+    to come up with a port of the butterfly() function suitable
     and optimized for your specific application yourself."""
 
     pi, po = generate_permutations(poly)
@@ -429,12 +429,12 @@ class TestCase(unittest.TestCase):
         pn = permute(p, pi)
         self.assertEqual(pi, [0,31,30,28,24,17,3,6,13,27,23,14,29,26,21,10,20,8,16,1,2,4,9,18,5,11,22,12,25,19,7,15])
         self.assertEqual(pn, [i for i in range(32)])
-    
+
     def test_rotate(self):
         x = [1,2,3,4,5,6,7,8]
         self.assertEqual(rotate(x,-2), [7,8,1,2,3,4,5,6])
         self.assertEqual(rotate(x, 2), [3,4,5,6,7,8,1,2])
-    
+
     def test_poly_degree(self):
         self.assertEqual(poly_degree(0x0b), 3)
         self.assertEqual(poly_degree(0x1053), 12)
@@ -453,19 +453,19 @@ class TestCase(unittest.TestCase):
         self.assertEqual(m3, [1, 1, 1, 0, 0, 1, 0])
         self.assertEqual(m4, [1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0])
         self.assertEqual(m5, [1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
-    
+
     def test_generate_permutations(self):
         POLY3 = 0x0b
         pi, po = generate_permutations(POLY3)
         self.assertEqual(pi, [0, 6, 7, 2, 5, 1, 4, 3])
         self.assertEqual(po, [0, 1, 2, 4, 5, 7, 3, 6])
-        
+
     def test_butterfly(self):
         poly = 0x25
         #poly = 0x0b
         mls = generate_mls(poly)
         P = mls_length_from_poly(poly)
-        
+
         # generate some sample data by rotating the mls
         # P times, prepending the 0 and also generate the
         # expected correlation results for each of them
@@ -479,43 +479,43 @@ class TestCase(unittest.TestCase):
             res = [1] + rotate(res0, -i)
             smplist.append(smp)
             reslist.append(res)
-            
+
         #debug_print(smplist, 3)
         #debug_print(reslist, 3)
-            
+
         p1, p2 = generate_permutations(poly)
-                
+
         for i in range(len(smplist)):
             samples = permute(smplist[i], p1)
-            butterfly(samples)
+            print(str(samples))
             result = permute(samples, p2)
             self.assertEqual(result, reslist[i])
-        
+
     def test_butterfly_large_with_shave(self):
         poly = 0x1107 # this will be quite large
         mls = generate_mls(poly)
-        
+
         # simulate samples that were made with a 12bit ADC
         # and use the full range. This would cause the maximum
         # possible correlation result to overflow an int16_t
         # by orders of magnitude if we would not already begin
         # shaving off bits  during the butterfly.
         samples = [0] + [4095 * x - 2048 for x in mls]
-        
+
         pi, po = generate_permutations(poly)
         samples = permute(samples, pi)
-        
-        # we must shave off at least 8 bits to make it not 
+
+        # we must shave off at least 8 bits to make it not
         # overflow a 16 bit signed integer.
         butterfly(samples, 8)
-        
+
         #debug_print(samples)
         self.assertEqual(min(samples), -32752)
-        
+
     def test_hagens_code(self):
         degree = 8
         results = find_all_primitive_polys(degree)
         self.assertEqual(results, [285, 299, 301, 333, 351, 355, 357, 361, 369, 391, 397, 425, 451, 463, 487, 501])
-        
-if __name__ == '__main__':    
+
+if __name__ == '__main__':
     unittest.main(exit=False)
